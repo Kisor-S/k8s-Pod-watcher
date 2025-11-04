@@ -1,10 +1,36 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"os"
+	"path/filepath"
+
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 func main() {
+
+	// Define command-line flags
+	kubeconfig := flag.String("kubeconfig", homeDir()+"/.kube/config", "(optional) absolute path to the kubeconfig file")
+	namespace := flag.String("namespace", "default", "namespace to watch (empty means all namespaces)")
+	flag.Parse()
+
+	// Build kuubernetes config (local kubeconfig or in-cluster config)
+	config, err := buildConfig(*kubeconfig)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to build kube config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Build Kubernetes clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to build kube config: %v\n", err)
+		os.Exit(1)
+	}
 
 }
 
@@ -14,4 +40,14 @@ func homeDir() string {
 		return h
 	}
 	return os.Getenv("USERPROFILE") // windows
+}
+
+// buildConfig loads kubeconfig or falls back to in-cluster config
+
+func buildConfig(kubeconfigPath string) (*rest.Config, error) {
+	if kubeconfigPath != "" {
+		return clientcmd.BuildConfigFromFlags("", filepath.Clean(kubeconfigPath))
+	}
+	// Fallback to in-cluster config
+	return rest.InClusterConfig()
 }
