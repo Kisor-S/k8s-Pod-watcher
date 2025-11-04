@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"syscall"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -55,6 +57,35 @@ func main() {
 
 	// Get Pod informer
 	podInformer := factory.Core().V1().Pods().Informer()
+
+	// Add event handlers for Add / Update / Delete
+	podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			if p, ok := obj.(*corev1.Pod); ok {
+				fmt.Printf("[ADDED]   %s/%s  (phase=%s)\n", p.Namespace, p.Name, p.Status.Phase)
+			}
+		},
+
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			if p, ok := newObj.(*corev1.Pod); ok {
+				fmt.Printf("[UPDATED] %s/%s  (phase=%s)\n", p.Namespace, p.Name, p.Status.Phase)
+			}
+		},
+
+		DeleteFunc: func(obj interface{}) {
+			// Deletion may come as a tombstone; handle both cases
+			switch t := obj.(type) {
+			case *corev1.Pod:
+				fmt.Printf("[DELETED] %s/%s\n", t.Namespace, t.Name)
+			case cache.DeletedFinalStateUnknown:
+				if p, ok := t.Obj.(*corev1.Pod); ok {
+					fmt.Printf("[DELETED] %s/%s\n", p.Namespace, p.Name)
+				}
+			default:
+				fmt.Printf("[DELETED] unknown object type\n")
+			}
+		},
+	})
 
 }
 
