@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/informers"
@@ -87,6 +88,23 @@ func main() {
 		},
 	})
 
+	// Start informer factory (runs in background goroutines)
+	factory.Start(stopCh)
+
+	// Wait for all caches to sync
+	if ok := cache.WaitForCacheSync(stopCh, podInformer.HasSynced); !ok {
+		fmt.Fprintf(os.Stderr, "failed to wait for caches to sync\n")
+		os.Exit(1)
+	}
+
+	fmt.Println("Pod watcher started. Listening for events... (Ctrl+C to stop)")
+
+	// Block until stop signal is received
+	<-stopCh
+
+	// give a small grace period for goroutines to finish printing
+	time.Sleep(200 * time.Millisecond)
+	fmt.Println("Exited.")
 }
 
 // homeDir returns the home directory for the current user
