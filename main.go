@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -43,6 +44,17 @@ func main() {
 		fmt.Println("\nReceived shutdown signal, stopping...")
 		close(stopCh)
 	}()
+
+	// SharedInformerFactory: namespace-scoped if namespace set, otherwise cluster-wide
+	var factory informers.SharedInformerFactory
+	if *namespace == "" {
+		factory = informers.NewSharedInformerFactory(clientset, 0)
+	} else {
+		factory = informers.NewSharedInformerFactoryWithOptions(clientset, 0, informers.WithNamespace(*namespace))
+	}
+
+	// Get Pod informer
+	podInformer := factory.Core().V1().Pods().Informer()
 
 }
 
