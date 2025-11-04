@@ -4,7 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -31,6 +33,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to build kube config: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Create a stop channel and handle SIGINT/SIGTERM for graceful shutdown
+	stopCh := make(chan struct{})
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sig
+		fmt.Println("\nReceived shutdown signal, stopping...")
+		close(stopCh)
+	}()
 
 }
 
