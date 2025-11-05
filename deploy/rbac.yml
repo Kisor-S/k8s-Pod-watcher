@@ -16,7 +16,7 @@ rules:
     verbs: ["get", "list", "watch"]
 ---
 
-kind: Rolebinding
+kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: pod-watcher-rolebinding
