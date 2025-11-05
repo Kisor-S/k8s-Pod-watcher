@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-watcher
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pod-watcher
+  template:
+    metadata:
+      labels:
+        app: pod-watcher
+    spec:
+      serviceAccountName: pod-watcher-sa
+      containers:
+        - name: pod-watcher
+          image: kishore2212/pod-watcher-v1:latest
+          imagePullPolicy: Always
+          resources:
+            limits:
+              memory: "100Mi"
+              cpu: "100m"
+            requests:
+              memory: "50Mi"
+              cpu: "50m"
