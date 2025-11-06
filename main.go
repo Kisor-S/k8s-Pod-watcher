@@ -115,12 +115,27 @@ func homeDir() string {
 	return os.Getenv("USERPROFILE") // windows
 }
 
-// buildConfig loads kubeconfig or falls back to in-cluster config
+// buildConfig loads kubeconfig if provided and exists, otherwise tries in-cluster config
 
 func buildConfig(kubeconfigPath string) (*rest.Config, error) {
 	if kubeconfigPath != "" {
-		return clientcmd.BuildConfigFromFlags("", filepath.Clean(kubeconfigPath))
+		// Check if the kubeconfig file exists
+		if _, err := os.Stat(kubeconfigPath); err == nil {
+			return clientcmd.BuildConfigFromFlags("", filepath.Clean(kubeconfigPath))
+		}
 	}
+
 	// Fallback to in-cluster config
-	return rest.InClusterConfig()
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return cfg, nil
+	}
+
+	//final fallback: try default kubeconfig in $HOME
+	home := os.Getenv("HOME")
+	if home == "" {
+		return nil, fmt.Errorf("HOME not set; and in-cluster config failed; provide --kubeconfig")
+	}
+	k := filepath.Join(home, ".kube", "config")
+	return clientcmd.BuildConfigFromFlags("", k)
 }
