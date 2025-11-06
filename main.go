@@ -20,7 +20,7 @@ import (
 func main() {
 
 	// Define command-line flags
-	kubeconfig := flag.String("kubeconfig", homeDir()+"/.kube/config", "(optional) absolute path to the kubeconfig file")
+	kubeconfig := flag.String("kubeconfig", "", "path to kubeconfig (optional; leave empty to use in-cluster config)")
 	namespace := flag.String("namespace", "default", "namespace to watch (empty means all namespaces)")
 	flag.Parse()
 
