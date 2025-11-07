@@ -25,11 +25,12 @@ func main() {
 	flag.Parse()
 
 	// Build kuubernetes config (local kubeconfig or in-cluster config)
-	config, err := buildConfig(*kubeconfig)
+	config, source, err := buildConfig(*kubeconfig)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to build kube config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "ERROR building kube config: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Printf("Using config from: %s\n", source)
 
 	// Build Kubernetes clientset
 	clientset, err := kubernetes.NewForConfig(config)
@@ -107,35 +108,56 @@ func main() {
 	fmt.Println("Exited.")
 }
 
-// homeDir returns the home directory for the current user
-func homeDir() string {
-	if h := os.Getenv("HOME"); h != "" {
-		return h
-	}
-	return os.Getenv("USERPROFILE") // windows
-}
+// buildConfig resolves kube config in this order:
+// 1) KUBECONFIG env (if set and exists)
+// 2) explicit kubeconfigPath passed as flag (if provided and exists)
+// 3) in-cluster config (when running inside Kubernetes)
+// 4) default ~/.kube/config
 
-// buildConfig loads kubeconfig if provided and exists, otherwise tries in-cluster config
-
-func buildConfig(kubeconfigPath string) (*rest.Config, error) {
-	if kubeconfigPath != "" {
-		// Check if the kubeconfig file exists
-		if _, err := os.Stat(kubeconfigPath); err == nil {
-			return clientcmd.BuildConfigFromFlags("", filepath.Clean(kubeconfigPath))
+func buildConfig(kubeconfigPath string) (*rest.Config, string, error) {
+	// 1) KUBECONFIG env variable
+	if env := os.Getenv("KUBECONFIG"); env != "" {
+		if _, err := os.Stat(env); err == nil {
+			cfg, err := clientcmd.BuildConfigFromFlags("", filepath.Clean(env))
+			if err == nil {
+				return cfg, env, nil
+			}
+			return nil, "", fmt.Errorf("failed to build config from KUBECONFIG=%s: %w", env, err)
 		}
+		// env was set but file missing -> return clear error
+		return nil, "", fmt.Errorf("KUBECONFIG is set but file not found: %s", env)
 	}
 
-	// Fallback to in-cluster config
-	cfg, err := rest.InClusterConfig()
-	if err != nil {
-		return cfg, nil
+	// 2) explicit flag
+	if kubeconfigPath != "" {
+		if _, err := os.Stat(kubeconfigPath); err == nil {
+			cfg, err := clientcmd.BuildConfigFromFlags("", filepath.Clean(kubeconfigPath))
+			if err == nil {
+				return cfg, kubeconfigPath, nil
+			}
+			return nil, "", fmt.Errorf("failed to build config from provided kubeconfig %s: %w", kubeconfigPath, err)
+		}
+		return nil, "", fmt.Errorf("kubeconfig provided but not found: %s", kubeconfigPath)
 	}
 
-	//final fallback: try default kubeconfig in $HOME
+	// 3) in-cluster (works when running as Pod)
+	if cfg, err := rest.InClusterConfig(); err == nil {
+		return cfg, "in-cluster", nil
+	}
+
+	// 4) default ~/.kube/config
 	home := os.Getenv("HOME")
 	if home == "" {
-		return nil, fmt.Errorf("HOME not set; and in-cluster config failed; provide --kubeconfig")
+		return nil, "", fmt.Errorf("HOME not set; cannot find default kubeconfig; set KUBECONFIG or use --kubeconfig")
 	}
-	k := filepath.Join(home, ".kube", "config")
-	return clientcmd.BuildConfigFromFlags("", k)
+	defaultPath := filepath.Join(home, ".kube", "config")
+	if _, err := os.Stat(defaultPath); err == nil {
+		cfg, err := clientcmd.BuildConfigFromFlags("", defaultPath)
+		if err == nil {
+			return cfg, defaultPath, nil
+		}
+		return nil, "", fmt.Errorf("failed to build config from %s: %w", defaultPath, err)
+	}
+
+	return nil, "", fmt.Errorf("no kubeconfig found (KUBECONFIG, --kubeconfig, in-cluster, or %s)", defaultPath)
 }
